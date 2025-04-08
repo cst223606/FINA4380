@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-file_path = '../Pairs.xlsx'
+file_path = '../../Pairs.xlsx'
 price_df = pd.read_excel(file_path, sheet_name=0, parse_dates=['Date'], index_col='Date')  # Prices
 pair_df = pd.read_excel(file_path, sheet_name=1)  # Cointegrated pairs
 
@@ -23,7 +23,6 @@ zscore_df = (spread_df - spread_df.mean()) / spread_df.std()
 commission = 1
 initial_cash = 100000
 
-print(spread_df.head())
 # Initialize storage
 cash = {}
 shares = {}
@@ -51,8 +50,8 @@ for pair in spread_df.columns:
                 # Long Y, Short X
                 shares_y = int(cash[pair] / (2 * (price_y + commission)))
                 shares_x = int(cash[pair] / (2 * (price_x + commission)))
-                cash[pair] -= (price_y - commission) * shares_y
-                cash[pair] += (price_x - commission) * shares_x
+                cash[pair] -= (price_y + commission) * shares_y
+                cash[pair] += (price_x + commission) * shares_x
                 shares[pair]['stock_y'] = shares_y
                 shares[pair]['stock_x'] = -shares_x
                 positions[pair] = 1
@@ -61,8 +60,8 @@ for pair in spread_df.columns:
                 # Short Y, Long X
                 shares_y = int(cash[pair] / (2 * (price_y + commission)))
                 shares_x = int(cash[pair] / (2 * (price_x + commission)))
-                cash[pair] += (price_y - commission) * shares_y
-                cash[pair] -= (price_x - commission) * shares_x
+                cash[pair] += (price_y + commission) * shares_y
+                cash[pair] -= (price_x + commission) * shares_x
                 shares[pair]['stock_y'] = -shares_y
                 shares[pair]['stock_x'] = shares_x
                 positions[pair] = 1
@@ -72,8 +71,8 @@ for pair in spread_df.columns:
             if abs(z) < 0.2 or abs(z) > 2:  # Exit: convergence or stop-loss
                 shares_y = shares[pair]['stock_y']
                 shares_x = shares[pair]['stock_x']
-                cash[pair] += shares_y * (price_y - commission if shares_y > 0 else price_y + commission)
-                cash[pair] += shares_x * (price_x - commission if shares_x > 0 else price_x + commission)
+                cash[pair] += shares_y * (price_y + commission if shares_y > 0 else price_y + commission)
+                cash[pair] += shares_x * (price_x + commission if shares_x > 0 else price_x + commission)
                 shares[pair] = {'stock_y': 0, 'stock_x': 0}
                 positions[pair] = 0
 
