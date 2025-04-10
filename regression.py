@@ -12,7 +12,7 @@ from statsmodels.tsa.stattools import adfuller
 
 
 # Load Excel file
-df = pd.read_excel(r'C:\Users\黄俊贤\Desktop\stocks\STOCKS.xlsx', parse_dates=['Date'], index_col='Date')
+df = pd.read_excel(r'\STOCKS.xlsx', parse_dates=['Date'], index_col='Date')
 
 
 # Check
