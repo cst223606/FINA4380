@@ -1,22 +1,28 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Load pair data
+# Load pair datacd 
 file_path = '../../new pairs.xlsx'
 pair_df = pd.read_excel(file_path)
-pair_df = pair_df.sort_values(by='ADF P-value', ascending=False).reset_index(drop=True)
+pair_df = pair_df.sort_values(by='ADF P-value', ascending=True).reset_index(drop=True)
+
 used_stocks = set()
-filtered_pairs = []
+filtered_rows = []
 
 for _, row in pair_df.iterrows():
-    stock_y = row['Stock Y']
     stock_x = row['Stock X']
-    if stock_y not in used_stocks and stock_x not in used_stocks:
-        filtered_pairs.append(row)
-        used_stocks.update([stock_y, stock_x])
+    stock_y = row['Stock Y']
+    
+    # If neither stock has been used, keep the pair
+    if stock_x not in used_stocks and stock_y not in used_stocks:
+        used_stocks.update([stock_x, stock_y])
+        filtered_rows.append(row)
 
-pair_df = pd.DataFrame(filtered_pairs)
-print(pair_df.head())
+# Create new DataFrame of filtered rows
+filtered_df = pd.DataFrame(filtered_rows).reset_index(drop=True)
+filtered_df.to_excel('filtered_pairs.xlsx')
+print(filtered_df)
+num_pairs = len(filtered_df)
 
 # Extract needed tickers from 'Stock X' and 'Stock Y'
 tickers_needed = set(pair_df['Stock Y']).union(set(pair_df['Stock X']))
@@ -56,12 +62,14 @@ for sheet_name in xls.sheet_names:
 price_df = pd.DataFrame(stock_prices)
 price_df = price_df.sort_index(ascending=True)
 
-print(price_df.head())
-#price_df.to_excel("price_df.xlsx")
+latest_date = price_df.index.max()
+three_years_ago = latest_date - pd.DateOffset(years=3)
+price_df = price_df[price_df.index >= three_years_ago]
+#print(price_df.head())
 
 # Create spread based on pairs in pair_df
 spread_dict = {}
-for _, row in pair_df.iterrows():
+for _, row in filtered_df.iterrows():
     stock_y = row['Stock Y']
     stock_x = row['Stock X']
     beta = row['Beta']
@@ -71,15 +79,12 @@ for _, row in pair_df.iterrows():
         spread_dict[f"{stock_y}-{stock_x}"] = spread
 
 spread_df = pd.DataFrame(spread_dict)
-print(spread_df.head())
 
+#print(spread_df.head())
+#spread_df.to_excel('spread_df.xlsx')
 # Calculate z-scores for each pair's spread
 zscore_df = (spread_df - spread_df.mean()) / spread_df.std()
-print(zscore_df.head())
-
-# Trading parameters
-commission = 1
-initial_cash = 1000
+zscore_df.to_excel('Zscore_Output.xlsx', sheet_name='Z-Scores')
 
 # Initialize storage for trading data
 cash = {}
@@ -88,59 +93,107 @@ stock_value = {}
 summary = {}
 positions = {}
 sub_value = {}
-
+short_interest_rate = 0.1/365 #daily short interest rate
+cash_interest_rate = 0.04/365 #daily cash interest rate
+short_interest = 0
+cash_interest = 0
+total_cash = 1000000000
 # Execute trades for each pair
-for _, row in pair_df.iterrows():
+for _, row in filtered_df.iterrows():
+    # Trading parameters
+    commission = 0.005
+    initial_cash = total_cash / num_pairs
+    position_cash = initial_cash * 0.95
+    initial_cash = initial_cash - position_cash
+    residual_cash = 0
+    shares_y = 0
+    shares_x = 0
+    residual_cash = 0
+    y_entranceP = 0
+    x_entranceP = 0
+
     stock_y = row['Stock Y']
     stock_x = row['Stock X']
     beta = row['Beta']
     
     pair = f"{stock_y}-{stock_x}"
-    cash[pair] = initial_cash
+    cash[pair] = position_cash
     shares[pair] = {'stock_y': 0, 'stock_x': 0}
     stock_value[pair] = 0
     summary[pair] = []
     positions[pair] = 0
     zscore = zscore_df[pair]
-    
+
     for date, z in zscore.items():
         price_y = price_df.at[date, stock_y]
         price_x = price_df.at[date, stock_x]
-
+        residual_cash = cash[pair]
         # Entry signal: 
         if positions[pair] == 0:
             # Long Y, Short X
-            if 1.5 < z < 2:
-                shares_y = int(cash[pair] / (2 * (price_y + commission)))
-                shares_x = int(cash[pair] / (2 * (price_x + commission)))
-                cash[pair] -= (price_y + commission) * shares_y
-                cash[pair] += (price_x + commission) * shares_x
+            if 2 < z < 2.3:
+                shares_y = int(cash[pair] / ((price_y + commission)))
+                shares_x = -int(shares_y * beta)
+                y_entranceP = price_y
+                x_entranceP = price_x
+                if (cash[pair] - (y_entranceP + commission) * shares_y + shares_x * commission) < 0 :
+                    shares_y = shares_y - 1
+                    shares_x = -int(shares_y * beta)
+                residual_cash = cash[pair] - (y_entranceP + commission) * shares_y + shares_x * commission
+                cash[pair] =  residual_cash - shares_x * x_entranceP #shares_x < 0
                 shares[pair]['stock_y'] = shares_y
-                shares[pair]['stock_x'] = -shares_x
-                positions[pair] = 1
-            # Long X, Short Y
-            elif -2 < z < -1.5:
-                shares_y = int(cash[pair] / (2 * (price_y + commission)))
-                shares_x = int(cash[pair] / (2 * (price_x + commission)))
-                cash[pair] += (price_y - commission) * shares_y
-                cash[pair] -= (price_x - commission) * shares_x
-                shares[pair]['stock_y'] = -shares_y
                 shares[pair]['stock_x'] = shares_x
                 positions[pair] = 1
-
+            # Long X, Short Y
+            elif -2.3 < z < -2:
+                shares_x = int(cash[pair] / ((price_x + commission)))
+                shares_y = -int(shares_x * beta)
+                x_entranceP = price_x
+                y_entranceP = price_y
+                if (cash[pair] - (x_entranceP + commission) * shares_x + shares_y * commission) < 0 :
+                    shares_x = shares_x - 1
+                    shares_y = -int(shares_x * beta)
+                residual_cash = cash[pair] - (x_entranceP + commission) * shares_x + shares_y * commission
+                cash[pair] =  residual_cash - shares_y * y_entranceP #shares_x < 0
+                shares[pair]['stock_y'] = shares_y
+                shares[pair]['stock_x'] = shares_x
+                positions[pair] = -1
+            
         # Exit condition: Convergence or stop-loss
         elif positions[pair] != 0:
-            if abs(z) < 0.2 or abs(z) > 2:
-                shares_y = shares[pair]['stock_y']
-                shares_x = shares[pair]['stock_x']
-                cash[pair] += shares_y * (price_y + commission if shares_y > 0 else price_y + commission)
-                cash[pair] += shares_x * (price_x + commission if shares_x > 0 else price_x + commission)
+            if abs(z) < 0.5 or abs(z) > 2.5:
+                y_exitP = price_y
+                x_exitP = price_x
+                #Sell Y, Buy back X
+                if positions[pair] == 1: 
+                    cash[pair] = cash[pair] + shares_y * (y_exitP - commission) - shares_x * (commission - x_exitP)
+                #Sell X, Buy back Y
+                elif positions[pair] == -1:
+                    cash[pair] = cash[pair] + shares_x * (x_exitP - commission) - shares_y * (commission - y_exitP)
+                stock_value[pair] = 0
                 shares[pair] = {'stock_y': 0, 'stock_x': 0}
                 positions[pair] = 0
 
         # Update portfolio value
-        stock_value[pair] = (shares[pair]['stock_y'] * price_y + shares[pair]['stock_x'] * price_x) if positions[pair] != 0 else 0
-        sub_value[pair] = cash[pair] + stock_value[pair]
+        if positions[pair] != 0:
+            stock_value[pair] = shares_x * price_x + shares_y * price_y # daily net stock value
+            if positions[pair] == 1:
+                short_interest = short_interest_rate * shares_x * x_entranceP # shares_x < 0
+            elif positions[pair] == -1:
+                short_interest = short_interest_rate * shares_y * y_entranceP # shares_y < 0
+            cash_interest = (initial_cash + residual_cash) * cash_interest_rate
+            initial_cash = initial_cash + cash_interest + short_interest
+            sub_value[pair] = cash[pair] + stock_value[pair] + initial_cash
+        else :
+            cash_interest = (initial_cash + cash[pair]) * cash_interest_rate
+            initial_cash =  initial_cash + cash_interest #residual_cash included in cash[pair]
+            sub_value[pair] = cash[pair] + initial_cash
+        test = 2
+        if positions[pair] == 1 or positions[pair] == -1:
+            test = 1
+        if date == pd.Timestamp('2025-04-04') :
+            #print(sub_value[pair])
+            test =1
 
         summary[pair].append({
             'Date': date,
@@ -152,17 +205,18 @@ for _, row in pair_df.iterrows():
             'Z-Score': z,
             'Position': positions[pair]
         })
-
+#print(sub_value)
 # Calculate total portfolio value
 account_value_df = pd.DataFrame({
     pair: pd.DataFrame(data).set_index('Date')['sub_value']
     for pair, data in summary.items()
 })
 account_value_df['Total_Account_Value'] = account_value_df.sum(axis=1)
-print(account_value_df.head())
+print(account_value_df)
+
 # Output to Excel
 #with pd.ExcelWriter('Trading_Summary_Output.xlsx') as writer:
-   # account_value_df.to_excel(writer, sheet_name='Portfolio_Account_Value')
+    #account_value_df.to_excel(writer, sheet_name='Portfolio_Account_Value')
 
 # Plot total account value
 plt.figure(figsize=(12, 6))
