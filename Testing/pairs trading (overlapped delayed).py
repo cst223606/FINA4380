@@ -51,10 +51,13 @@ for sheet_name in xls.sheet_names:
 # Combine stock prices into DataFrame and sort by date
 price_df = pd.DataFrame(stock_prices)
 price_df = price_df.sort_index(ascending=True)
+
 latest_date = price_df.index.max()
 
-three_years_ago = latest_date - pd.DateOffset(years=3)
-price_df = price_df[price_df.index >= three_years_ago]
+start_date = latest_date - pd.DateOffset(years=3)
+end_date = latest_date - pd.DateOffset(months=6)
+
+price_df = price_df[(price_df.index >= start_date) & (price_df.index <= end_date)]
 
 spread_dict = {}
 for _, row in pair_df.iterrows():
@@ -70,7 +73,7 @@ spread_df = pd.DataFrame(spread_dict)
 zscore_df = (spread_df - spread_df.mean()) / spread_df.std()
 #print(spread_df)
 print(zscore_df)
-zscore_df.to_excel('Zscore_Output.xlsx', sheet_name='Z-Scores')
+#zscore_df.to_excel('Zscore_Output.xlsx', sheet_name='Z-Scores')
 
 
 

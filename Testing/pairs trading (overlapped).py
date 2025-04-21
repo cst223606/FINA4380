@@ -51,10 +51,13 @@ for sheet_name in xls.sheet_names:
 # Combine stock prices into DataFrame and sort by date
 price_df = pd.DataFrame(stock_prices)
 price_df = price_df.sort_index(ascending=True)
+
 latest_date = price_df.index.max()
 
-three_years_ago = latest_date - pd.DateOffset(years=3)
-price_df = price_df[price_df.index >= three_years_ago]
+start_date = latest_date - pd.DateOffset(years=3)
+end_date = latest_date - pd.DateOffset(months=6)
+
+price_df = price_df[(price_df.index >= start_date) & (price_df.index <= end_date)]
 
 spread_dict = {}
 for _, row in pair_df.iterrows():
@@ -70,7 +73,7 @@ spread_df = pd.DataFrame(spread_dict)
 zscore_df = (spread_df - spread_df.mean()) / spread_df.std()
 #print(spread_df)
 print(zscore_df)
-zscore_df.to_excel('Zscore_Output.xlsx', sheet_name='Z-Scores')
+#zscore_df.to_excel('Zscore_Output.xlsx', sheet_name='Z-Scores')
 
 
 
@@ -116,7 +119,7 @@ for _, row in filtered_pair_df.iterrows():
         
         # Entry logic
         if position == 0:
-            if 2 < z < 2.3:
+            if 1.7 < z < 2:
                 reserved_cash = total_cash * 0.05
                 cash = total_cash * 0.95
                 # Short 1/Beta Y, Long X
@@ -132,7 +135,7 @@ for _, row in filtered_pair_df.iterrows():
                 position = -1
                 trade = trade + 1
 
-            elif -2.3 < z < -2 :
+            elif -2 < z < -1.7 :
                 reserved_cash = total_cash * 0.05
                 cash = total_cash * 0.95
                 # Long Y, Short Beta X
@@ -150,7 +153,7 @@ for _, row in filtered_pair_df.iterrows():
         
         # Exit logic
         elif position != 0:
-            if abs(z) < 0.3 or abs(z) > 2.5 or reserved_cash < daily_short_interest :
+            if abs(z) < 0.5 or abs(z) > 2.3 or reserved_cash < daily_short_interest :
                 # Close position
                 if position == 1 :
                     cash = residual_cash - price_x * units_x
